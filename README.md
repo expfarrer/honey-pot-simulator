@@ -6,6 +6,19 @@ A production-grade defensive honeypot management and attacker intelligence platf
 
 ---
 
+## Versioning
+
+The current version is defined in `src/lib/version.ts`:
+
+```ts
+export const APP_VERSION = "0.2.0";
+export const APP_VERSION_LABEL = "Phase 1.5 Intelligence Upgrade";
+```
+
+After every meaningful update, bump `APP_VERSION` in `lib/version.ts` and update `APP_VERSION_LABEL` when the phase changes. The footer on every admin page reads from this file — never hardcode the version elsewhere.
+
+---
+
 ## Architecture
 
 ```

@@ -1,6 +1,6 @@
 {
   "name": "settrap-command",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -10,7 +10,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "seed:intelligence": "tsx prisma/seed-intelligence.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

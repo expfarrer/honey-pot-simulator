@@ -34,6 +34,7 @@ enum ActorType {
   BOT
   HUMAN
   ADVANCED
+  UNKNOWN
 }
 
 enum EventType {
@@ -48,19 +49,30 @@ enum EventType {
   PORT_FORWARD
 }
 
-model Honeypot {
-  id           String         @id @default(cuid())
-  name         String
-  type         HoneypotType   @default(SSH)
-  status       HoneypotStatus @default(STOPPED)
-  publicPort   Int            @unique
-  configJson   Json           @default("{}")
-  dockerService String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+enum ChainType {
+  FINGERPRINT
+  PAYLOAD_EXECUTION
+  PERSISTENCE
+  ANTI_FORENSICS
+  IOT_BOT
+}
 
-  sessions     Session[]
-  auditLogs    AuditLog[]
+// ── Core models ───────────────────────────────────────────
+
+model Honeypot {
+  id            String         @id @default(cuid())
+  name          String
+  type          HoneypotType   @default(SSH)
+  status        HoneypotStatus @default(STOPPED)
+  publicPort    Int            @unique
+  configJson    Json           @default("{}")
+  dockerService String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  attackChains  AttackChain[]
 
   @@map("honeypots")
 }
@@ -76,14 +88,16 @@ model Session {
   endedAt     DateTime?
   riskLevel   RiskLevel @default(LOW)
   actorType   ActorType @default(BOT)
-  sessionRef  String?   @unique  // external session ID from cowrie
+  sessionRef  String?   @unique
 
-  honeypot    Honeypot  @relation(fields: [honeypotId], references: [id], onDelete: Cascade)
-  events      Event[]
+  honeypot     Honeypot      @relation(fields: [honeypotId], references: [id], onDelete: Cascade)
+  events       Event[]
+  attackChains AttackChain[]
 
   @@index([honeypotId])
   @@index([sourceIp])
   @@index([startedAt])
+  @@index([riskLevel])
   @@map("sessions")
 }
 
@@ -93,7 +107,7 @@ model Event {
   eventType EventType
   command   String?
   username  String?
-  password  String?   // stored hashed — never plaintext in prod
+  password  String?
   rawJson   Json
   createdAt DateTime  @default(now())
 
@@ -106,16 +120,90 @@ model Event {
 }
 
 model AuditLog {
-  id          String   @id @default(cuid())
-  honeypotId  String?
-  action      String
-  actorIp     String?
-  details     Json     @default("{}")
-  createdAt   DateTime @default(now())
+  id         String    @id @default(cuid())
+  honeypotId String?
+  action     String
+  actorIp    String?
+  details    Json      @default("{}")
+  createdAt  DateTime  @default(now())
 
-  honeypot    Honeypot? @relation(fields: [honeypotId], references: [id], onDelete: SetNull)
+  honeypot   Honeypot? @relation(fields: [honeypotId], references: [id], onDelete: SetNull)
 
   @@index([honeypotId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ── Intelligence models ───────────────────────────────────
+
+model CommandPattern {
+  id                String    @id @default(cuid())
+  command           String    @db.Text
+  normalizedCommand String    @unique @db.Text
+  category          String
+  count             Int       @default(1)
+  uniqueIps         Int       @default(1)
+  seenIpsJson       Json      @default("[]")
+  firstSeen         DateTime  @default(now())
+  lastSeen          DateTime  @default(now())
+  riskLevel         RiskLevel @default(LOW)
+
+  @@index([category])
+  @@index([riskLevel])
+  @@index([count])
+  @@map("command_patterns")
+}
+
+model CredentialPattern {
+  id                  String   @id @default(cuid())
+  username            String
+  passwordHash        String
+  usernamePasswordKey String   @unique
+  count               Int      @default(1)
+  uniqueIps           Int      @default(1)
+  seenIpsJson         Json     @default("[]")
+  firstSeen           DateTime @default(now())
+  lastSeen            DateTime @default(now())
+
+  @@index([username])
+  @@index([count])
+  @@map("credential_patterns")
+}
+
+model ActorProfile {
+  id               String    @id @default(cuid())
+  sourceIp         String    @unique
+  actorType        ActorType @default(UNKNOWN)
+  riskScore        Int       @default(0)
+  totalSessions    Int       @default(0)
+  totalEvents      Int       @default(0)
+  firstSeen        DateTime  @default(now())
+  lastSeen         DateTime  @default(now())
+  topCommandsJson  Json      @default("[]")
+  topUsernamesJson Json      @default("[]")
+  notes            String?
+
+  @@index([actorType])
+  @@index([riskScore])
+  @@map("actor_profiles")
+}
+
+model AttackChain {
+  id         String    @id @default(cuid())
+  sessionId  String
+  honeypotId String
+  chainType  ChainType
+  severity   RiskLevel
+  stepsJson  Json
+  confidence Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  session    Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  honeypot   Honeypot  @relation(fields: [honeypotId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, chainType])
+  @@index([honeypotId])
+  @@index([severity])
+  @@index([createdAt])
+  @@map("attack_chains")
 }

@@ -5,8 +5,10 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 
 const NAV_ITEMS = [
-  { href: "/admin", label: "DASHBOARD" },
-  { href: "/admin/honeypots", label: "HONEYPOTS" },
+  { href: "/admin",                              label: "DASHBOARD",           exact: true },
+  { href: "/admin/honeypots",                    label: "HONEYPOTS",           exact: false },
+  { href: "/admin/intelligence",                 label: "THREAT INTELLIGENCE", exact: false },
+  { href: "/admin/intelligence/interesting-sessions", label: "INTERESTING SESSIONS", exact: false },
 ];
 
 export function AdminNav() {
@@ -27,16 +29,17 @@ export function AdminNav() {
 
         <nav className="flex items-center gap-1">
           {NAV_ITEMS.map((item) => {
-            const active =
-              item.href === "/admin"
-                ? pathname === "/admin"
-                : pathname.startsWith(item.href);
+            const active = item.exact
+              ? pathname === item.href
+              : pathname === item.href || (pathname.startsWith(item.href + "/") && !NAV_ITEMS.some(
+                  (other) => other.href !== item.href && other.href.startsWith(item.href) && pathname.startsWith(other.href)
+                ));
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={clsx(
-                  "px-4 py-4 text-xs font-mono tracking-widest border-b-2 transition",
+                  "px-4 py-4 text-xs font-mono tracking-widest border-b-2 transition whitespace-nowrap",
                   active
                     ? "border-[#00ff88] text-[#00ff88]"
                     : "border-transparent text-gray-500 hover:text-gray-300"
@@ -48,7 +51,7 @@ export function AdminNav() {
           })}
         </nav>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-3 shrink-0">
           <span className="inline-flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-[#00ff88] shadow-[0_0_6px_#00ff88] animate-pulse" />
             <span className="text-xs text-gray-500 font-mono">LIVE</span>

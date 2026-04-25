@@ -10,6 +10,14 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const CHAIN_COLORS: Record<string, string> = {
+  FINGERPRINT:       "text-[#3d9eff]",
+  PAYLOAD_EXECUTION: "text-[#ff4757]",
+  PERSISTENCE:       "text-[#a55eea]",
+  ANTI_FORENSICS:    "text-[#ff4757]",
+  IOT_BOT:           "text-[#ffa502]",
+};
+
 async function getDashboardData() {
   const since24h = subHours(new Date(), 24);
 
@@ -22,6 +30,9 @@ async function getDashboardData() {
     topCommands,
     recentSessions,
     timeSeriesRaw,
+    topCommandPatterns,
+    topCredentialPatterns,
+    recentCriticalChains,
   ] = await Promise.all([
     prisma.honeypot.count({ where: { status: "RUNNING" } }),
     prisma.session.count({ where: { startedAt: { gte: since24h } } }),
@@ -63,6 +74,22 @@ async function getDashboardData() {
       select: { startedAt: true },
       orderBy: { startedAt: "asc" },
     }),
+    prisma.commandPattern.findMany({
+      orderBy: { count: "desc" },
+      take: 5,
+    }),
+    prisma.credentialPattern.findMany({
+      orderBy: { count: "desc" },
+      take: 5,
+    }),
+    prisma.attackChain.findMany({
+      where: { severity: { in: ["CRITICAL", "HIGH"] } },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      include: {
+        session: { select: { sourceIp: true } },
+      },
+    }),
   ]);
 
   const buckets = new Map<string, number>();
@@ -77,31 +104,20 @@ async function getDashboardData() {
     }
   }
   const timeSeries = Array.from(buckets.entries()).map(([time, count]) => ({ time, count }));
-
   const riskMap = Object.fromEntries(riskBreakdown.map((r) => [r.riskLevel, r._count]));
 
   return {
-    activeHoneypots,
-    totalConnections,
-    uniqueIps: uniqueIpGroups.length,
-    riskMap,
-    topUsernames,
-    topCommands,
-    recentSessions,
-    timeSeries,
+    activeHoneypots, totalConnections, uniqueIps: uniqueIpGroups.length,
+    riskMap, topUsernames, topCommands, recentSessions, timeSeries,
+    topCommandPatterns, topCredentialPatterns, recentCriticalChains,
   };
 }
 
 export default async function AdminDashboard() {
   const {
-    activeHoneypots,
-    totalConnections,
-    uniqueIps,
-    riskMap,
-    topUsernames,
-    topCommands,
-    recentSessions,
-    timeSeries,
+    activeHoneypots, totalConnections, uniqueIps, riskMap,
+    topUsernames, topCommands, recentSessions, timeSeries,
+    topCommandPatterns, topCredentialPatterns, recentCriticalChains,
   } = await getDashboardData();
 
   return (
@@ -113,9 +129,9 @@ export default async function AdminDashboard() {
 
       {/* Stat row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Active Honeypots" value={activeHoneypots} accent="green" />
-        <StatCard label="Connections (24h)" value={totalConnections} accent="blue" />
-        <StatCard label="Unique Source IPs" value={uniqueIps} accent="yellow" />
+        <StatCard label="Active Honeypots"   value={activeHoneypots}   accent="green" />
+        <StatCard label="Connections (24h)"  value={totalConnections}  accent="blue" />
+        <StatCard label="Unique Source IPs"  value={uniqueIps}         accent="yellow" />
         <StatCard
           label="Critical Sessions"
           value={riskMap["CRITICAL"] ?? 0}
@@ -144,53 +160,38 @@ export default async function AdminDashboard() {
         <ConnectionChart data={timeSeries} />
       </div>
 
-      {/* Bottom grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Top usernames */}
+      {/* Signals row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <div className="bg-[#0f1117] border border-[#1e2535] rounded-lg p-5">
           <div className="text-xs text-gray-500 uppercase tracking-widest mb-4">
             Top Usernames (24h)
           </div>
           <div className="space-y-2">
-            {topUsernames.length === 0 && (
-              <div className="text-xs text-gray-600">No data</div>
-            )}
+            {topUsernames.length === 0 && <div className="text-xs text-gray-600">No data</div>}
             {topUsernames.map((u) => (
               <div key={u.username} className="flex items-center justify-between">
-                <span className="font-mono text-xs text-gray-300 truncate max-w-[160px]">
-                  {u.username}
-                </span>
-                <span className="font-mono text-xs text-[#3d9eff] ml-2 shrink-0">
-                  {u._count}
-                </span>
+                <span className="font-mono text-xs text-gray-300 truncate max-w-[160px]">{u.username}</span>
+                <span className="font-mono text-xs text-[#3d9eff] ml-2 shrink-0">{u._count}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Top commands */}
         <div className="bg-[#0f1117] border border-[#1e2535] rounded-lg p-5">
           <div className="text-xs text-gray-500 uppercase tracking-widest mb-4">
             Top Commands (24h)
           </div>
           <div className="space-y-2">
-            {topCommands.length === 0 && (
-              <div className="text-xs text-gray-600">No data</div>
-            )}
+            {topCommands.length === 0 && <div className="text-xs text-gray-600">No data</div>}
             {topCommands.map((c) => (
               <div key={c.command} className="flex items-center justify-between">
-                <span className="font-mono text-xs text-[#ffa502] truncate max-w-[180px]">
-                  {c.command}
-                </span>
-                <span className="font-mono text-xs text-gray-500 ml-2 shrink-0">
-                  {c._count}
-                </span>
+                <span className="font-mono text-xs text-[#ffa502] truncate max-w-[180px]">{c.command}</span>
+                <span className="font-mono text-xs text-gray-500 ml-2 shrink-0">{c._count}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Risk by actor */}
         <div className="bg-[#0f1117] border border-[#1e2535] rounded-lg p-5">
           <div className="text-xs text-gray-500 uppercase tracking-widest mb-4">
             Recent Sessions
@@ -198,9 +199,7 @@ export default async function AdminDashboard() {
           <div className="space-y-2">
             {recentSessions.slice(0, 5).map((s) => (
               <div key={s.id} className="flex items-center justify-between gap-2">
-                <span className="font-mono text-xs text-gray-400 truncate">
-                  {s.sourceIp}
-                </span>
+                <span className="font-mono text-xs text-gray-400 truncate">{s.sourceIp}</span>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <ActorBadge type={s.actorType} />
                   <RiskBadge level={s.riskLevel} />
@@ -211,12 +210,83 @@ export default async function AdminDashboard() {
         </div>
       </div>
 
+      {/* Intelligence summaries */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        {/* Top command patterns */}
+        <div className="bg-[#0f1117] border border-[#1e2535] rounded-lg p-5">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs text-gray-500 uppercase tracking-widest">Top Pattern Commands</span>
+            <Link href="/admin/intelligence" className="text-[10px] text-[#3d9eff] hover:underline font-mono">
+              view all →
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {topCommandPatterns.length === 0 && <div className="text-xs text-gray-600">No patterns yet</div>}
+            {topCommandPatterns.map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-2">
+                <span className="font-mono text-xs text-gray-400 truncate max-w-[170px]">
+                  {p.normalizedCommand}
+                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] text-gray-600">{p.uniqueIps >= 100 ? "100+" : p.uniqueIps} IPs</span>
+                  <RiskBadge level={p.riskLevel} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Top credential combos */}
+        <div className="bg-[#0f1117] border border-[#1e2535] rounded-lg p-5">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs text-gray-500 uppercase tracking-widest">Top Credential Combos</span>
+            <Link href="/admin/intelligence" className="text-[10px] text-[#3d9eff] hover:underline font-mono">
+              view all →
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {topCredentialPatterns.length === 0 && <div className="text-xs text-gray-600">No credentials yet</div>}
+            {topCredentialPatterns.map((c) => (
+              <div key={c.id} className="flex items-center justify-between gap-2">
+                <span className="font-mono text-xs text-gray-300 truncate">{c.username}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] text-gray-600">{c.count}×</span>
+                  <span className="text-[10px] text-gray-700 font-mono">{c.passwordHash.slice(0, 6)}…</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Recent critical chains */}
+        <div className="bg-[#0f1117] border border-[#1e2535] rounded-lg p-5">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs text-gray-500 uppercase tracking-widest">Recent Attack Chains</span>
+            <Link href="/admin/intelligence" className="text-[10px] text-[#3d9eff] hover:underline font-mono">
+              view all →
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {recentCriticalChains.length === 0 && <div className="text-xs text-gray-600">No chains detected</div>}
+            {recentCriticalChains.map((c) => (
+              <div key={c.id} className="flex items-center justify-between gap-2">
+                <span className={`font-mono text-xs truncate ${CHAIN_COLORS[c.chainType] ?? "text-gray-400"}`}>
+                  {c.chainType.replace(/_/g, " ")}
+                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] text-gray-600">{c.session.sourceIp}</span>
+                  <RiskBadge level={c.severity} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Recent sessions table */}
-      <div className="mt-8 bg-[#0f1117] border border-[#1e2535] rounded-lg overflow-hidden">
+      <div className="bg-[#0f1117] border border-[#1e2535] rounded-lg overflow-hidden">
         <div className="px-6 py-4 border-b border-[#1e2535]">
-          <span className="text-xs text-gray-500 uppercase tracking-widest">
-            Recent Sessions
-          </span>
+          <span className="text-xs text-gray-500 uppercase tracking-widest">Recent Sessions</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs font-mono">
@@ -246,12 +316,8 @@ export default async function AdminDashboard() {
                     {format(new Date(s.startedAt), "MMM dd HH:mm:ss")}
                   </td>
                   <td className="px-4 py-3 text-gray-400">{s._count.events}</td>
-                  <td className="px-4 py-3">
-                    <ActorBadge type={s.actorType} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <RiskBadge level={s.riskLevel} />
-                  </td>
+                  <td className="px-4 py-3"><ActorBadge type={s.actorType} /></td>
+                  <td className="px-4 py-3"><RiskBadge level={s.riskLevel} /></td>
                 </tr>
               ))}
             </tbody>

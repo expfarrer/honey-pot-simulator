@@ -166,3 +166,96 @@ export async function detectAttackChains(params: {
     });
   }
 }
+
+export async function detectHttpChains(params: {
+  sessionId: string;
+  honeypotId: string;
+}): Promise<void> {
+  const { sessionId, honeypotId } = params;
+
+  const events = await prisma.event.findMany({
+    where: { sessionId },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (events.length === 0) return;
+
+  const loginAttempts = events.filter((e) => e.eventType === "HTTP_LOGIN_ATTEMPT");
+  const payloadAttempts = events.filter((e) => e.eventType === "HTTP_PAYLOAD_ATTEMPT");
+  const httpRequests = events.filter(
+    (e) => e.eventType === "HTTP_REQUEST" || e.eventType === "HTTP_LOGIN_ATTEMPT" || e.eventType === "HTTP_PAYLOAD_ATTEMPT"
+  );
+
+  const chains: DetectedChain[] = [];
+
+  // AUTH_BRUTE_FORCE: 5+ login attempts in the same session
+  if (loginAttempts.length >= 5) {
+    chains.push({
+      chainType: "AUTH_BRUTE_FORCE",
+      severity: loginAttempts.length >= 20 ? "CRITICAL" : "HIGH",
+      steps: loginAttempts.slice(0, 20).map((e, i) => ({
+        order: i,
+        command: e.username ?? "unknown",
+        category: "login_attempt",
+      })),
+      confidence: Math.min(95, 60 + loginAttempts.length * 2),
+    });
+  }
+
+  // WEB_EXPLOIT: any payload attempts detected
+  if (payloadAttempts.length >= 1) {
+    const categories = payloadAttempts
+      .map((e) => (e.rawJson as Record<string, unknown>).payloadCategory as string)
+      .filter(Boolean);
+    const uniqueCats = [...new Set(categories)];
+    chains.push({
+      chainType: "WEB_EXPLOIT",
+      severity: payloadAttempts.length >= 3 || uniqueCats.length >= 2 ? "CRITICAL" : "HIGH",
+      steps: payloadAttempts.slice(0, 20).map((e, i) => ({
+        order: i,
+        command: (e.command ?? "").slice(0, 120),
+        category: ((e.rawJson as Record<string, unknown>).payloadCategory as string) ?? "unknown",
+      })),
+      confidence: Math.min(95, 70 + payloadAttempts.length * 5),
+    });
+  }
+
+  // SCAN: 10+ distinct endpoints visited in the same session
+  const endpoints = new Set(
+    httpRequests.map((e) => {
+      const raw = e.rawJson as Record<string, unknown>;
+      return (raw.endpoint as string) ?? e.command ?? "";
+    })
+  );
+  if (endpoints.size >= 10) {
+    chains.push({
+      chainType: "SCAN",
+      severity: "MEDIUM",
+      steps: [...endpoints].slice(0, 20).map((ep, i) => ({
+        order: i,
+        command: ep,
+        category: "scan",
+      })),
+      confidence: Math.min(90, 50 + endpoints.size * 2),
+    });
+  }
+
+  for (const chain of chains) {
+    await prisma.attackChain.upsert({
+      where: { sessionId_chainType: { sessionId, chainType: chain.chainType } },
+      update: {
+        severity: chain.severity,
+        stepsJson: chain.steps as unknown as Prisma.InputJsonValue,
+        confidence: chain.confidence,
+      },
+      create: {
+        sessionId,
+        honeypotId,
+        chainType: chain.chainType,
+        severity: chain.severity,
+        stepsJson: chain.steps as unknown as Prisma.InputJsonValue,
+        confidence: chain.confidence,
+      },
+    });
+  }
+}

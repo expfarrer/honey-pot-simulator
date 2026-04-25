@@ -12,8 +12,10 @@ function deriveActorType(params: {
   totalSessions: number;
   commands: string[];
   topCommands: { command: string; count: number }[];
+  httpRequestCount: number;
+  httpPayloadCount: number;
 }): ActorType {
-  const { totalSessions, commands } = params;
+  const { totalSessions, commands, httpRequestCount, httpPayloadCount } = params;
 
   const hasAdvancedIndicator = commands.some(
     (c) =>
@@ -26,10 +28,12 @@ function deriveActorType(params: {
   );
   if (hasAdvancedIndicator) return "ADVANCED";
 
+  if (httpPayloadCount >= 3) return "ADVANCED";
+
   if (totalSessions >= 2 && commands.length > 5) return "HUMAN";
   if (totalSessions >= 1 && commands.length > 3) return "HUMAN";
 
-  if (totalSessions === 0) return "UNKNOWN";
+  if (httpRequestCount > 20 || totalSessions === 0) return "BOT";
 
   return "BOT";
 }
@@ -57,8 +61,19 @@ export async function updateActorProfile(params: {
   usernames: string[];
   eventCount: number;
   isNewSession: boolean;
+  httpRequest?: boolean;
+  httpPayload?: boolean;
 }): Promise<void> {
-  const { sourceIp, riskLevel, commands, usernames, eventCount, isNewSession } = params;
+  const {
+    sourceIp,
+    riskLevel,
+    commands,
+    usernames,
+    eventCount,
+    isNewSession,
+    httpRequest = false,
+    httpPayload = false,
+  } = params;
   const riskScore = RISK_SCORES[riskLevel];
 
   const existing = await prisma.actorProfile.findUnique({ where: { sourceIp } });
@@ -80,10 +95,15 @@ export async function updateActorProfile(params: {
       ...commands,
     ];
 
+    const newHttpRequestCount = existing.httpRequestCount + (httpRequest ? 1 : 0);
+    const newHttpPayloadCount = existing.httpPayloadCount + (httpPayload ? 1 : 0);
+
     const derivedType = deriveActorType({
       totalSessions: existing.totalSessions + (isNewSession ? 1 : 0),
       commands: allCommands,
       topCommands: newTopCommands,
+      httpRequestCount: newHttpRequestCount,
+      httpPayloadCount: newHttpPayloadCount,
     });
 
     await prisma.actorProfile.update({
@@ -93,6 +113,8 @@ export async function updateActorProfile(params: {
         riskScore: Math.max(existing.riskScore, riskScore),
         totalSessions: isNewSession ? { increment: 1 } : undefined,
         totalEvents: { increment: eventCount },
+        httpRequestCount: httpRequest ? { increment: 1 } : undefined,
+        httpPayloadCount: httpPayload ? { increment: 1 } : undefined,
         lastSeen: new Date(),
         topCommandsJson: newTopCommands as Prisma.InputJsonValue,
         topUsernamesJson: newTopUsernames as Prisma.InputJsonValue,
@@ -105,6 +127,8 @@ export async function updateActorProfile(params: {
       totalSessions: isNewSession ? 1 : 0,
       commands,
       topCommands,
+      httpRequestCount: httpRequest ? 1 : 0,
+      httpPayloadCount: httpPayload ? 1 : 0,
     });
 
     await prisma.actorProfile.create({
@@ -114,6 +138,8 @@ export async function updateActorProfile(params: {
         riskScore,
         totalSessions: isNewSession ? 1 : 0,
         totalEvents: eventCount,
+        httpRequestCount: httpRequest ? 1 : 0,
+        httpPayloadCount: httpPayload ? 1 : 0,
         firstSeen: new Date(),
         lastSeen: new Date(),
         topCommandsJson: topCommands as Prisma.InputJsonValue,

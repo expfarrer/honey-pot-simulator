@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 
 const NAV_ITEMS = [
-  { href: "/admin",                              label: "DASHBOARD",           exact: true },
-  { href: "/admin/honeypots",                    label: "HONEYPOTS",           exact: false },
-  { href: "/admin/intelligence",                 label: "THREAT INTELLIGENCE", exact: false },
+  { href: "/admin",                                   label: "DASHBOARD",           exact: true },
+  { href: "/admin/honeypots",                         label: "HONEYPOTS",           exact: false },
+  { href: "/admin/intelligence",                      label: "THREAT INTELLIGENCE", exact: false },
   { href: "/admin/intelligence/interesting-sessions", label: "INTERESTING SESSIONS", exact: false },
+  { href: "/admin/intelligence/web-attacks",          label: "WEB ATTACKS",         exact: false },
 ];
 
 export function AdminNav() {

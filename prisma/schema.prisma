@@ -47,6 +47,9 @@ enum EventType {
   FILE_DOWNLOAD
   DISCONNECT
   PORT_FORWARD
+  HTTP_REQUEST
+  HTTP_LOGIN_ATTEMPT
+  HTTP_PAYLOAD_ATTEMPT
 }
 
 enum ChainType {
@@ -55,6 +58,14 @@ enum ChainType {
   PERSISTENCE
   ANTI_FORENSICS
   IOT_BOT
+  AUTH_BRUTE_FORCE
+  WEB_EXPLOIT
+  SCAN
+}
+
+enum PatternType {
+  COMMAND
+  HTTP_PAYLOAD
 }
 
 // ── Core models ───────────────────────────────────────────
@@ -137,20 +148,22 @@ model AuditLog {
 // ── Intelligence models ───────────────────────────────────
 
 model CommandPattern {
-  id                String    @id @default(cuid())
-  command           String    @db.Text
-  normalizedCommand String    @unique @db.Text
+  id                String      @id @default(cuid())
+  command           String      @db.Text
+  normalizedCommand String      @unique @db.Text
   category          String
-  count             Int       @default(1)
-  uniqueIps         Int       @default(1)
-  seenIpsJson       Json      @default("[]")
-  firstSeen         DateTime  @default(now())
-  lastSeen          DateTime  @default(now())
-  riskLevel         RiskLevel @default(LOW)
+  patternType       PatternType @default(COMMAND)
+  count             Int         @default(1)
+  uniqueIps         Int         @default(1)
+  seenIpsJson       Json        @default("[]")
+  firstSeen         DateTime    @default(now())
+  lastSeen          DateTime    @default(now())
+  riskLevel         RiskLevel   @default(LOW)
 
   @@index([category])
   @@index([riskLevel])
   @@index([count])
+  @@index([patternType])
   @@map("command_patterns")
 }
 
@@ -171,17 +184,19 @@ model CredentialPattern {
 }
 
 model ActorProfile {
-  id               String    @id @default(cuid())
-  sourceIp         String    @unique
-  actorType        ActorType @default(UNKNOWN)
-  riskScore        Int       @default(0)
-  totalSessions    Int       @default(0)
-  totalEvents      Int       @default(0)
-  firstSeen        DateTime  @default(now())
-  lastSeen         DateTime  @default(now())
-  topCommandsJson  Json      @default("[]")
-  topUsernamesJson Json      @default("[]")
-  notes            String?
+  id                String    @id @default(cuid())
+  sourceIp          String    @unique
+  actorType         ActorType @default(UNKNOWN)
+  riskScore         Int       @default(0)
+  totalSessions     Int       @default(0)
+  totalEvents       Int       @default(0)
+  httpRequestCount  Int       @default(0)
+  httpPayloadCount  Int       @default(0)
+  firstSeen         DateTime  @default(now())
+  lastSeen          DateTime  @default(now())
+  topCommandsJson   Json      @default("[]")
+  topUsernamesJson  Json      @default("[]")
+  notes             String?
 
   @@index([actorType])
   @@index([riskScore])

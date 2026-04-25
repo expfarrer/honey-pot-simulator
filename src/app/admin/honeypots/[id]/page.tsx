@@ -194,24 +194,44 @@ export default async function HoneypotDetailPage({
               {/* Event timeline */}
               <div className="px-6 pb-4 pl-16 space-y-1 bg-[#080b11]">
                 {session.events.map((ev) => {
-                  const cat = ev.command ? classifyCommand(ev.command) : null;
+                  const isHttp = ev.eventType.startsWith("HTTP_");
+                  const cat = ev.command && !isHttp ? classifyCommand(ev.command) : null;
+                  const raw = ev.rawJson as Record<string, unknown>;
+                  const payloadCat = raw?.payloadCategory as string | undefined;
+                  const httpEndpoint = raw?.endpoint as string | undefined;
+
                   return (
                     <div key={ev.id} className="flex items-start gap-3 py-1">
                       <span className="font-mono text-xs text-gray-600 w-20 shrink-0">
                         {format(new Date(ev.createdAt), "HH:mm:ss")}
                       </span>
-                      <span className="font-mono text-xs text-gray-500 w-24 shrink-0">
+                      <span className={`font-mono text-xs w-28 shrink-0 ${isHttp ? "text-[#3d9eff]" : "text-gray-500"}`}>
                         {ev.eventType}
                       </span>
-                      {ev.command && (
-                        <span className={`font-mono text-xs ${cat ? CATEGORY_COLORS[cat] : "text-gray-300"}`}>
-                          {ev.command}
+                      {isHttp ? (
+                        <span className="font-mono text-xs text-gray-400 truncate max-w-[300px]">
+                          {ev.username && <span className="text-gray-300">{ev.username}</span>}
+                          {ev.username && " @ "}
+                          <span className={payloadCat && payloadCat !== "NONE" ? "text-[#ff4757]" : "text-gray-500"}>
+                            {httpEndpoint ?? ev.command ?? ""}
+                          </span>
+                          {payloadCat && payloadCat !== "NONE" && (
+                            <span className="ml-2 text-[#ffa502]">[{payloadCat}]</span>
+                          )}
                         </span>
-                      )}
-                      {ev.username && !ev.command && (
-                        <span className="font-mono text-xs text-gray-400">
-                          user: {ev.username}
-                        </span>
+                      ) : (
+                        <>
+                          {ev.command && (
+                            <span className={`font-mono text-xs ${cat ? CATEGORY_COLORS[cat] : "text-gray-300"}`}>
+                              {ev.command}
+                            </span>
+                          )}
+                          {ev.username && !ev.command && (
+                            <span className="font-mono text-xs text-gray-400">
+                              user: {ev.username}
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
                   );

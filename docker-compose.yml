@@ -1,0 +1,67 @@
+##############################################################
+# SetTrap Command — Docker Compose
+#
+# WARNING: Deploy ONLY on an isolated VPS with a dedicated IP.
+# DO NOT run on a home network or development machine.
+# Port 2222 is exposed publicly to attract real attackers.
+##############################################################
+
+version: "3.9"
+
+services:
+  # ── PostgreSQL ────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: settrap
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-settrap_secret}
+      POSTGRES_DB: settrap
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"   # bind to loopback only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U settrap"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Next.js Application ───────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://settrap:${POSTGRES_PASSWORD:-settrap_secret}@postgres:5432/settrap
+      ADMIN_SECRET: ${ADMIN_SECRET:?ADMIN_SECRET must be set}
+      INGEST_SECRET: ${INGEST_SECRET:-}
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:3000:3000"   # front with nginx/caddy; do not expose directly
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # runtime control reads compose
+
+  # ── Cowrie SSH Honeypot ───────────────────────────────────
+  cowrie:
+    image: cowrie/cowrie:latest
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:2222:2222"     # publicly exposed — intentionally
+    volumes:
+      - ./cowrie/cowrie.cfg:/cowrie/etc/cowrie.cfg:ro
+      - cowrie_logs:/cowrie/var/log/cowrie
+    environment:
+      COWRIE_TELNET_ENABLED: "false"
+    # TODO: Add egress firewall rules at the host level to block
+    # outbound traffic FROM this container. Example iptables rule:
+    #   iptables -I DOCKER-USER -s <cowrie_container_ip> -j DROP
+    # This prevents downloaded payloads from beaconing out.
+
+volumes:
+  postgres_data:
+  cowrie_logs:

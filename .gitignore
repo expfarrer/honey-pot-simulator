@@ -1,0 +1,8 @@
+.env
+.env.local
+.next/
+node_modules/
+*.log
+cowrie/logs/*.json
+cowrie/logs/*.log
+prisma/dev.db

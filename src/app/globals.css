@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0a0d14;
+  --foreground: #e2e8f0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0f1117;
+}
+::-webkit-scrollbar-thumb {
+  background: #2d3748;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4a5568;
+}
+
+/* Table */
+.table-row-hover:hover {
+  background-color: #161b27;
+}
+
+/* Risk badges */
+.risk-low    { color: #00ff88; background: rgba(0,255,136,0.08); border-color: rgba(0,255,136,0.2); }
+.risk-medium { color: #ffa502; background: rgba(255,165,2,0.08);  border-color: rgba(255,165,2,0.2); }
+.risk-high   { color: #ff6b35; background: rgba(255,107,53,0.08); border-color: rgba(255,107,53,0.2); }
+.risk-critical { color: #ff4757; background: rgba(255,71,87,0.08); border-color: rgba(255,71,87,0.2); }
+
+/* Status badges */
+.status-running { color: #00ff88; }
+.status-paused  { color: #ffa502; }
+.status-stopped { color: #718096; }
+.status-error   { color: #ff4757; }

@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum HoneypotType {
+  SSH
+  HTTP
+  WORDPRESS
+  REDIS
+  MONGODB
+  IOT
+}
+
+enum HoneypotStatus {
+  RUNNING
+  PAUSED
+  STOPPED
+  ERROR
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ActorType {
+  BOT
+  HUMAN
+  ADVANCED
+}
+
+enum EventType {
+  CONNECTION
+  LOGIN_ATTEMPT
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  COMMAND
+  FILE_UPLOAD
+  FILE_DOWNLOAD
+  DISCONNECT
+  PORT_FORWARD
+}
+
+model Honeypot {
+  id           String         @id @default(cuid())
+  name         String
+  type         HoneypotType   @default(SSH)
+  status       HoneypotStatus @default(STOPPED)
+  publicPort   Int            @unique
+  configJson   Json           @default("{}")
+  dockerService String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  sessions     Session[]
+  auditLogs    AuditLog[]
+
+  @@map("honeypots")
+}
+
+model Session {
+  id          String    @id @default(cuid())
+  honeypotId  String
+  sourceIp    String
+  sourcePort  Int?
+  country     String?
+  asn         String?
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  riskLevel   RiskLevel @default(LOW)
+  actorType   ActorType @default(BOT)
+  sessionRef  String?   @unique  // external session ID from cowrie
+
+  honeypot    Honeypot  @relation(fields: [honeypotId], references: [id], onDelete: Cascade)
+  events      Event[]
+
+  @@index([honeypotId])
+  @@index([sourceIp])
+  @@index([startedAt])
+  @@map("sessions")
+}
+
+model Event {
+  id        String    @id @default(cuid())
+  sessionId String
+  eventType EventType
+  command   String?
+  username  String?
+  password  String?   // stored hashed — never plaintext in prod
+  rawJson   Json
+  createdAt DateTime  @default(now())
+
+  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("events")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  honeypotId  String?
+  action      String
+  actorIp     String?
+  details     Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  honeypot    Honeypot? @relation(fields: [honeypotId], references: [id], onDelete: SetNull)
+
+  @@index([honeypotId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

@@ -1,0 +1,8 @@
+# Local development overrides — not for production.
+# Fixes config and log paths for the cowrie container, and
+# uses a bind mount so cowrie-forward.mjs can read logs from the host.
+services:
+  cowrie:
+    volumes:
+      - ./cowrie/cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg:ro
+      - ./cowrie/logs:/cowrie/cowrie-git/var/log/cowrie

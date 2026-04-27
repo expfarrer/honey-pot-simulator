@@ -12,13 +12,13 @@ const CowrieEventSchema = z
   .object({
     eventid: z.string(),
     timestamp: z.string(),
-    session: z.string(),
-    src_ip: z.string(),
+    session: z.string().optional(),
+    src_ip: z.string().optional(),
     src_port: z.number().optional(),
     username: z.string().optional(),
     password: z.string().optional(),
     input: z.string().optional(),
-    message: z.string().optional(),
+    message: z.union([z.string(), z.array(z.unknown())]).optional(),
     sensor: z.string().optional(),
   })
   .passthrough();
@@ -124,8 +124,9 @@ export async function POST(req: NextRequest) {
 
   const sessionMap = new Map<string, typeof events>();
   for (const event of events) {
-    if (!sessionMap.has(event.session)) sessionMap.set(event.session, []);
-    sessionMap.get(event.session)!.push(event);
+    const sid = event.session ?? "unknown";
+    if (!sessionMap.has(sid)) sessionMap.set(sid, []);
+    sessionMap.get(sid)!.push(event);
   }
 
   let insertedSessions = 0;
@@ -139,7 +140,7 @@ export async function POST(req: NextRequest) {
     const connectEvent = sessionEvents.find((e) => e.eventid.includes("session.connect"));
     const disconnectEvent = sessionEvents.find((e) => e.eventid.includes("session.closed"));
 
-    const sourceIp = connectEvent?.src_ip ?? sessionEvents[0].src_ip;
+    const sourceIp = connectEvent?.src_ip ?? sessionEvents.find((e) => e.src_ip)?.src_ip ?? "unknown";
     const startedAt = connectEvent
       ? new Date(connectEvent.timestamp)
       : new Date(sessionEvents[0].timestamp);
